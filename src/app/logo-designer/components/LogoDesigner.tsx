@@ -3,71 +3,52 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { 
-  Plus,
-  BookOpen,
-  Book,
-  BookText,
-  Library,
-  Notebook,
-  ScrollText,
-  Undo2,
-  Redo2,
-  ChevronDown,
-  FileImage,
-  FileCode,
-  Download
+  Book, 
+  Building2, 
+  Check, 
+  Library, 
+  Notebook, 
+  ScrollText, 
+  Sparkles
 } from 'lucide-react';
 import ColorPicker from './ColorPicker';
 import BackgroundTools from './BackgroundTools';
 import IconTools from './IconTools';
+import Navbar from './shared/Navbar';
+import DownloadButton from './shared/DownloadButton';
+import LogoCanvas from './shared/LogoCanvas';
+import IconGrid from './shared/IconGrid';
+import { AskAIModal } from './shared/AskAIModal';
+import { BackgroundSettings, Template } from './types';
 
-interface LogoSettings {
+interface LogoDesignerProps {}
+
+interface HistoryState {
+  iconSettings: IconSettings;
+  backgroundSettings: BackgroundSettings;
+}
+
+interface IconSettings {
   size: number;
   rotate: number;
   borderWidth: number;
   borderColor: string;
   fillOpacity: number;
   fillColor: string;
-}
-
-type GradientPosition = 'left' | 'center' | 'right' | 'custom';
-
-interface BackgroundSettings extends LogoSettings {
-  rounded: number;
-  padding: number;
-  shadow: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none';
-  isGradient: boolean;
-  gradientAngle: number;
-  gradientType: 'linear' | 'radial';
-  gradientPosition: GradientPosition;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  shape: 'circle' | 'rounded-rectangle' | 'rectangle';
-  gradient: string;
-  svg: string;
-}
-
-interface LogoDesignerProps {}
-
-interface HistoryState {
-  iconSettings: LogoSettings;
-  backgroundSettings: BackgroundSettings;
+  customSvgPath?: string;
 }
 
 export default function LogoDesigner({}: LogoDesignerProps) {
   const [activeTab, setActiveTab] = useState<'icon' | 'background'>('icon');
   const [selectedIcon, setSelectedIcon] = useState<string>('book');
   
-  const [iconSettings, setIconSettings] = useState<LogoSettings>({
+  const [iconSettings, setIconSettings] = useState<IconSettings>({
     size: 300,
     rotate: 0,
     borderWidth: 0,
     borderColor: '#000000',
     fillOpacity: 100,
-    fillColor: '#000000'
+    fillColor: '#000000',
   });
 
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({
@@ -91,7 +72,7 @@ export default function LogoDesigner({}: LogoDesignerProps) {
   ]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
 
-  const addToHistory = useCallback((newIconSettings: LogoSettings, newBackgroundSettings: BackgroundSettings) => {
+  const addToHistory = useCallback((newIconSettings: IconSettings, newBackgroundSettings: BackgroundSettings) => {
     const newHistory = history.slice(0, currentHistoryIndex + 1);
     newHistory.push({
       iconSettings: newIconSettings,
@@ -126,7 +107,7 @@ export default function LogoDesigner({}: LogoDesignerProps) {
     }
   }, [currentHistoryIndex, history]);
 
-  const updateIconSettings = useCallback((newSettings: LogoSettings) => {
+  const updateIconSettings = useCallback((newSettings: IconSettings) => {
     setIconSettings(newSettings);
     addToHistory(newSettings, backgroundSettings);
   }, [backgroundSettings, addToHistory]);
@@ -140,14 +121,16 @@ export default function LogoDesigner({}: LogoDesignerProps) {
 
   const currentSettings = activeTab === 'icon' ? iconSettings : backgroundSettings;
   const setCurrentSettings = activeTab === 'icon' 
-    ? (settings: LogoSettings) => updateIconSettings(settings)
+    ? (settings: IconSettings) => updateIconSettings(settings)
     : (settings: Partial<BackgroundSettings>) => updateBackgroundSettings({ ...backgroundSettings, ...settings });
 
-  const icons = {
-    book: <BookText strokeWidth={2} />,
-    library: <Library strokeWidth={2} />,
-    notebook: <Notebook strokeWidth={2} />,
-    scroll: <ScrollText strokeWidth={2} />
+  const icons: Record<string, any> = {
+    book: Book,
+    building: Building2,
+    check: Check,
+    library: Library,
+    notebook: Notebook,
+    scroll: ScrollText
   };
 
   const getShadowStyle = (shadow: BackgroundSettings['shadow']) => {
@@ -189,29 +172,37 @@ export default function LogoDesigner({}: LogoDesignerProps) {
   };
 
   const getIconContent = () => {
-    const selectedIconComponent = icons[selectedIcon as keyof typeof icons];
-    if (!selectedIconComponent) return null;
+    if (iconSettings.customSvgPath) {
+      return (
+        <svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={iconSettings.fillColor}
+          strokeWidth={iconSettings.borderWidth || 2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d={iconSettings.customSvgPath} />
+        </svg>
+      );
+    }
 
-    return React.cloneElement(selectedIconComponent, {
-      className: 'w-full h-full',
-      width: "100%",
-      height: "100%",
+    const IconComponent = icons[selectedIcon];
+    if (!IconComponent) return null;
+    
+    return React.createElement(IconComponent, {
+      size: "100%",
       strokeWidth: iconSettings.borderWidth || 2,
-      stroke: iconSettings.fillColor,
-      style: {
-        strokeWidth: iconSettings.borderWidth || 2,
-        stroke: iconSettings.fillColor,
-        fill: 'none'
-      }
+      color: iconSettings.fillColor,
+      className: "w-full h-full"
     });
   };
 
   const handleDownload = async (format: 'png' | 'svg') => {
     const downloadableZone = document.querySelector('.logo-background');
-    const logoContainer = downloadableZone?.querySelector('.logo-container');
-    const iconContainer = downloadableZone?.querySelector('.icon-container');
-    
-    if (!downloadableZone || !logoContainer || !iconContainer) {
+    if (!downloadableZone) {
       console.error('Logo elements not found');
       return;
     }
@@ -220,17 +211,15 @@ export default function LogoDesigner({}: LogoDesignerProps) {
       switch (format) {
         case 'png':
           try {
+            // Create a temporary container
             const tempContainer = downloadableZone.cloneNode(true) as HTMLElement;
-            const tempLogo = tempContainer.querySelector('.logo-container') as HTMLElement;
-            const tempIcon = tempContainer.querySelector('.icon-container') as HTMLElement;
-            const tempSvg = tempIcon?.querySelector('svg') as SVGElement;
-            
-            // Apply styles to the temporary container
             tempContainer.style.position = 'absolute';
             tempContainer.style.left = '-9999px';
             tempContainer.classList.remove('border-2', 'border-dashed', 'border-gray-300');
-            
-            // Apply logo container styles
+            document.body.appendChild(tempContainer);
+
+            // Get the logo container and apply styles
+            const tempLogo = tempContainer.querySelector('.logo-container') as HTMLElement;
             if (tempLogo) {
               tempLogo.style.width = `${500 - (backgroundSettings.padding * 2)}px`;
               tempLogo.style.height = `${500 - (backgroundSettings.padding * 2)}px`;
@@ -241,8 +230,9 @@ export default function LogoDesigner({}: LogoDesignerProps) {
               tempLogo.style.opacity = (backgroundSettings.fillOpacity / 100).toString();
               Object.assign(tempLogo.style, getBackgroundStyle());
             }
-            
-            // Apply icon styles
+
+            // Get the icon container and apply styles
+            const tempIcon = tempContainer.querySelector('.icon-container') as HTMLElement;
             if (tempIcon) {
               tempIcon.style.width = `${iconSettings.size}px`;
               tempIcon.style.height = `${iconSettings.size}px`;
@@ -251,6 +241,7 @@ export default function LogoDesigner({}: LogoDesignerProps) {
             }
 
             // Apply SVG styles
+            const tempSvg = tempIcon?.querySelector('svg') as SVGElement;
             if (tempSvg) {
               tempSvg.setAttribute('width', '100%');
               tempSvg.setAttribute('height', '100%');
@@ -262,10 +253,9 @@ export default function LogoDesigner({}: LogoDesignerProps) {
               tempSvg.style.stroke = iconSettings.fillColor;
               tempSvg.style.strokeWidth = (iconSettings.borderWidth || 2).toString();
               tempSvg.style.fill = 'none';
-              
+
               // Apply styles to all SVG children
-              const svgElements = tempSvg.querySelectorAll('path, circle, rect, line');
-              svgElements.forEach(el => {
+              tempSvg.querySelectorAll('path, circle, rect, line').forEach(el => {
                 if (el instanceof SVGElement) {
                   el.setAttribute('stroke', iconSettings.fillColor);
                   el.setAttribute('stroke-width', (iconSettings.borderWidth || 2).toString());
@@ -276,11 +266,8 @@ export default function LogoDesigner({}: LogoDesignerProps) {
                 }
               });
             }
-            
-            // Add to document temporarily
-            document.body.appendChild(tempContainer);
-            
-            // Use html2canvas
+
+            // Use html2canvas with proper configuration
             const canvas = await html2canvas(tempContainer, {
               backgroundColor: null,
               scale: 2,
@@ -288,29 +275,35 @@ export default function LogoDesigner({}: LogoDesignerProps) {
               useCORS: true,
               allowTaint: true,
               width: 500,
-              height: 500
+              height: 500,
+              onclone: (clonedDoc) => {
+                const clonedElement = clonedDoc.querySelector('.logo-background') as HTMLElement;
+                if (clonedElement) {
+                  clonedElement.style.transform = 'none';
+                  clonedElement.style.top = '0';
+                  clonedElement.style.left = '0';
+                }
+              }
             });
-            
+
             // Remove temporary container
             document.body.removeChild(tempContainer);
 
             // Convert to blob and download
-            const pngBlob = await new Promise<Blob | null>((resolve) => {
-              canvas.toBlob(resolve, 'image/png', 1.0);
-            });
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                throw new Error('Failed to create PNG blob');
+              }
 
-            if (!pngBlob) {
-              throw new Error('Failed to create PNG blob');
-            }
-
-            const downloadUrl = URL.createObjectURL(pngBlob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = 'logo.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(downloadUrl);
+              const downloadUrl = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = downloadUrl;
+              link.download = 'logo.png';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(downloadUrl);
+            }, 'image/png', 1.0);
           } catch (err) {
             console.error('Error creating PNG:', err);
             throw err;
@@ -319,122 +312,106 @@ export default function LogoDesigner({}: LogoDesignerProps) {
 
         case 'svg':
           try {
-            // Create a new SVG element
+            // Create SVG element
             const svgNamespace = "http://www.w3.org/2000/svg";
             const svg = document.createElementNS(svgNamespace, "svg");
             svg.setAttribute("width", "500");
             svg.setAttribute("height", "500");
             svg.setAttribute("viewBox", "0 0 500 500");
-            
-            // Add defs for gradient if needed
-            const defs = document.createElementNS(svgNamespace, "defs");
-            let gradientId = '';
-            
+
+            // Add background
+            const background = document.createElementNS(svgNamespace, "rect");
+            background.setAttribute("width", "500");
+            background.setAttribute("height", "500");
+            background.setAttribute("rx", backgroundSettings.rounded === 9999 ? "250" : backgroundSettings.rounded.toString());
+            background.setAttribute("ry", backgroundSettings.rounded === 9999 ? "250" : backgroundSettings.rounded.toString());
+
+            // Handle gradient or solid color
             if (backgroundSettings.isGradient) {
-              gradientId = 'logoGradient';
+              const defs = document.createElementNS(svgNamespace, "defs");
+              const gradientId = 'logoGradient';
               const gradient = document.createElementNS(
                 svgNamespace,
                 backgroundSettings.gradientType === 'linear' ? 'linearGradient' : 'radialGradient'
               );
               gradient.setAttribute('id', gradientId);
-              
+
               if (backgroundSettings.gradientType === 'linear') {
-                // Set x1, y1, x2, y2 for precise angle control
                 const angle = backgroundSettings.gradientAngle;
                 const angleInRadians = (angle - 90) * (Math.PI / 180);
                 const x1 = 50 + Math.cos(angleInRadians) * 50;
                 const y1 = 50 + Math.sin(angleInRadians) * 50;
                 const x2 = 50 + Math.cos(angleInRadians + Math.PI) * 50;
                 const y2 = 50 + Math.sin(angleInRadians + Math.PI) * 50;
-                
+
                 gradient.setAttribute('x1', `${x1}%`);
                 gradient.setAttribute('y1', `${y1}%`);
                 gradient.setAttribute('x2', `${x2}%`);
                 gradient.setAttribute('y2', `${y2}%`);
 
-                // Add gradient stops for linear gradient
+                // Linear gradient colors
                 const stop1 = document.createElementNS(svgNamespace, "stop");
-                stop1.setAttribute("offset", "0%");
-                stop1.setAttribute("stop-color", backgroundSettings.borderColor);
-                
                 const stop2 = document.createElementNS(svgNamespace, "stop");
-                stop2.setAttribute("offset", "100%");
-                stop2.setAttribute("stop-color", backgroundSettings.fillColor);
                 
+                stop1.setAttribute("offset", "0%");
+                stop2.setAttribute("offset", "100%");
+                
+                stop1.setAttribute("stop-color", backgroundSettings.borderColor);
+                stop2.setAttribute("stop-color", backgroundSettings.fillColor);
+
                 gradient.appendChild(stop1);
                 gradient.appendChild(stop2);
               } else {
-                // For radial gradient
+                // Radial gradient
+                gradient.setAttribute('gradientUnits', 'objectBoundingBox');
+                
                 const position = backgroundSettings.gradientPosition;
-                let cx = '50%', cy = '50%';
-                let fx = '50%', fy = '50%';
-                let r = '70%';
                 
                 switch (position) {
                   case 'left':
-                    cx = '0%';
-                    cy = '50%';
-                    fx = '0%';
-                    fy = '50%';
-                    r = '100%';
+                    gradient.setAttribute('cx', '0');
+                    gradient.setAttribute('cy', '0.5');
+                    gradient.setAttribute('r', '1');
+                    gradient.setAttribute('fx', '0');
+                    gradient.setAttribute('fy', '0.5');
                     break;
                   case 'right':
-                    cx = '100%';
-                    cy = '50%';
-                    fx = '100%';
-                    fy = '50%';
-                    r = '100%';
+                    gradient.setAttribute('cx', '1');
+                    gradient.setAttribute('cy', '0.5');
+                    gradient.setAttribute('r', '1');
+                    gradient.setAttribute('fx', '1');
+                    gradient.setAttribute('fy', '0.5');
                     break;
-                  case 'custom':
-                    // Add custom position handling if needed
+                  case 'center':
+                  default:
+                    gradient.setAttribute('cx', '0.5');
+                    gradient.setAttribute('cy', '0.5');
+                    gradient.setAttribute('r', '0.7071067811865476');
+                    gradient.setAttribute('fx', '0.5');
+                    gradient.setAttribute('fy', '0.5');
                     break;
                 }
+
+                const stop1 = document.createElementNS(svgNamespace, "stop");
+                const stop2 = document.createElementNS(svgNamespace, "stop");
                 
-                gradient.setAttribute('cx', cx);
-                gradient.setAttribute('cy', cy);
-                gradient.setAttribute('r', r);
-                gradient.setAttribute('fx', fx);
-                gradient.setAttribute('fy', fy);
-                gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-                
-                if (position === 'left' || position === 'right') {
-                  const stop1 = document.createElementNS(svgNamespace, "stop");
-                  stop1.setAttribute("offset", "0%");
+                stop1.setAttribute("offset", "0%");
+                stop2.setAttribute("offset", "100%");
+
+                if (position === 'right') {
                   stop1.setAttribute("stop-color", backgroundSettings.fillColor);
-                  
-                  const stop2 = document.createElementNS(svgNamespace, "stop");
-                  stop2.setAttribute("offset", "100%");
                   stop2.setAttribute("stop-color", backgroundSettings.borderColor);
-                  
-                  gradient.appendChild(stop1);
-                  gradient.appendChild(stop2);
                 } else {
-                  // Center position uses two stops
-                  const stop1 = document.createElementNS(svgNamespace, "stop");
-                  stop1.setAttribute("offset", "0%");
                   stop1.setAttribute("stop-color", backgroundSettings.fillColor);
-                  
-                  const stop2 = document.createElementNS(svgNamespace, "stop");
-                  stop2.setAttribute("offset", "100%");
                   stop2.setAttribute("stop-color", backgroundSettings.borderColor);
-                  
-                  gradient.appendChild(stop1);
-                  gradient.appendChild(stop2);
                 }
+
+                gradient.appendChild(stop1);
+                gradient.appendChild(stop2);
               }
-              
               defs.appendChild(gradient);
               svg.appendChild(defs);
-            }
-            
-            // Create background
-            const background = document.createElementNS(svgNamespace, "rect");
-            background.setAttribute("width", "500");
-            background.setAttribute("height", "500");
-            background.setAttribute("rx", backgroundSettings.rounded === 9999 ? "250" : backgroundSettings.rounded.toString());
-            background.setAttribute("ry", backgroundSettings.rounded === 9999 ? "250" : backgroundSettings.rounded.toString());
-            
-            if (backgroundSettings.isGradient) {
+
               background.setAttribute("fill", `url(#${gradientId})`);
             } else {
               background.setAttribute("fill", backgroundSettings.fillColor);
@@ -443,43 +420,37 @@ export default function LogoDesigner({}: LogoDesignerProps) {
                 background.setAttribute("stroke-width", backgroundSettings.borderWidth.toString());
               }
             }
-            
-            background.style.opacity = (backgroundSettings.fillOpacity / 100).toString();
+
             svg.appendChild(background);
 
-            // Get the current icon SVG
-            const iconSvg = iconContainer.querySelector('svg');
+            // Add icon
+            const iconSvg = downloadableZone.querySelector('svg');
             if (iconSvg) {
               const iconClone = iconSvg.cloneNode(true) as SVGElement;
-              
-              // Calculate icon position to center it
               const iconSize = iconSettings.size;
               const x = (500 - iconSize) / 2;
               const y = (500 - iconSize) / 2;
-              
-              // Create a group for the icon with proper transformation
+
               const iconGroup = document.createElementNS(svgNamespace, "g");
               iconGroup.setAttribute("transform", `translate(${x},${y}) rotate(${iconSettings.rotate} ${iconSize/2} ${iconSize/2})`);
-              
-              // Set icon styles
+
               iconClone.setAttribute("width", iconSize.toString());
               iconClone.setAttribute("height", iconSize.toString());
               iconClone.setAttribute("stroke", iconSettings.fillColor);
               iconClone.setAttribute("stroke-width", (iconSettings.borderWidth || 2).toString());
               iconClone.setAttribute("fill", "none");
-              
-              // Apply styles to all icon elements
+
               iconClone.querySelectorAll('path, circle, rect, line').forEach(el => {
                 el.setAttribute("stroke", iconSettings.fillColor);
                 el.setAttribute("stroke-width", (iconSettings.borderWidth || 2).toString());
                 el.setAttribute("fill", "none");
               });
-              
+
               iconGroup.appendChild(iconClone);
               svg.appendChild(iconGroup);
             }
 
-            // Convert SVG to string and download
+            // Convert to string and download
             const svgString = new XMLSerializer().serializeToString(svg);
             const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
             const svgUrl = URL.createObjectURL(svgBlob);
@@ -517,65 +488,40 @@ export default function LogoDesigner({}: LogoDesignerProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+
+  const handleIconSelect = (svgPath: string) => {
+    setSelectedIcon('custom');  
+    setIconSettings(prev => ({
+      ...prev,
+      customSvgPath: svgPath
+    }));
+  };
+
+  const [generatedIcons, setGeneratedIcons] = useState<string[]>([]);
+
+  const handleIconsGenerated = (icons: string[]) => {
+    setGeneratedIcons(icons);
+    // Add logic to display the icons in your UI
+  };
+
+  const handleIconClick = (iconName: string) => {
+    setSelectedIcon(iconName);
+    setIconSettings(prev => ({
+      ...prev,
+      customSvgPath: undefined  
+    }));
+  };
+
   return (
     <div>
-      {/* Navbar */}
-      <nav className="h-14 border-b flex items-center px-4 justify-between">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-semibold">Logo Designer</h1>
-          <div className="flex items-center gap-2">
-            <button 
-              className={`p-2 rounded-md ${currentHistoryIndex > 0 ? 'hover:bg-gray-100 text-gray-900' : 'text-gray-300 cursor-not-allowed'}`}
-              onClick={handleUndo}
-              disabled={currentHistoryIndex === 0}
-            >
-              <Undo2 className="w-4 h-4" />
-            </button>
-            <button 
-              className={`p-2 rounded-md ${currentHistoryIndex < history.length - 1 ? 'hover:bg-gray-100 text-gray-900' : 'text-gray-300 cursor-not-allowed'}`}
-              onClick={handleRedo}
-              disabled={currentHistoryIndex === history.length - 1}
-            >
-              <Redo2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        <div className="relative" ref={downloadRef}>
-          <button
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-md hover:bg-gray-800"
-            onClick={() => setIsDownloadOpen(!isDownloadOpen)}
-          >
-            <Download className="w-4 h-4" />
-            Download
-            <ChevronDown className="w-4 h-4" />
-          </button>
-
-          {isDownloadOpen && (
-            <div className="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg py-1 z-50">
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                onClick={() => {
-                  handleDownload('png');
-                  setIsDownloadOpen(false);
-                }}
-              >
-                <FileImage className="w-4 h-4" />
-                PNG
-              </button>
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                onClick={() => {
-                  handleDownload('svg');
-                  setIsDownloadOpen(false);
-                }}
-              >
-                <FileCode className="w-4 h-4" />
-                SVG
-              </button>
-            </div>
-          )}
-        </div>
-      </nav>
+      <Navbar 
+        currentHistoryIndex={currentHistoryIndex}
+        historyLength={history.length}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onDownload={handleDownload}
+      />
 
       <div className="flex h-[calc(100vh-57px)]">
         {/* Left Sidebar */}
@@ -652,102 +598,41 @@ export default function LogoDesigner({}: LogoDesignerProps) {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 bg-[#f8f9fa] overflow-auto">
-          <div className="h-full w-full min-h-[800px] relative">
-            <div className="absolute inset-0" style={{ 
-              backgroundImage: `
-                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-              `,
-              backgroundSize: '20px 20px'
-            }} />
-            
-            {/* Downloadable Zone Indicator */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="relative">
-                {/* Fixed Downloadable Zone */}
-                <div 
-                  className="absolute border-2 border-dashed border-gray-300 rounded-lg logo-background"
-                  style={{
-                    width: '500px',
-                    height: '500px',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                  onMouseEnter={() => setShowTooltip(true)}
-                  onMouseLeave={() => setShowTooltip(false)}
-                >
-                  {/* Logo Container that expands with padding */}
-                  <div 
-                    className="logo-container flex items-center justify-center relative"
-                    style={{
-                      width: `${500 - (backgroundSettings.padding * 2)}px`, 
-                      height: `${500 - (backgroundSettings.padding * 2)}px`,
-                      margin: `${backgroundSettings.padding}px`,
-                      borderRadius: backgroundSettings.rounded === 9999 ? '50%' : `${backgroundSettings.rounded}px`,
-                      ...getBackgroundStyle(),
-                      opacity: backgroundSettings.fillOpacity / 100,
-                      boxShadow: getShadowStyle(backgroundSettings.shadow)
-                    }}
-                  >
-                    <div
-                      className="icon-container relative flex items-center justify-center"
-                      style={{
-                        width: `${iconSettings.size}px`,
-                        height: `${iconSettings.size}px`,
-                        transform: `rotate(${iconSettings.rotate}deg)`,
-                        opacity: iconSettings.fillOpacity / 100,
-                        stroke: iconSettings.fillColor,
-                        strokeWidth: iconSettings.borderWidth || 2
-                      }}
-                    >
-                      <div className="w-full h-full flex items-center justify-center" style={{ stroke: 'inherit', strokeWidth: 'inherit' }}>
-                        {getIconContent()}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {showTooltip && (
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap transition-opacity duration-200">
-                      Downloadable zone
-                      <div className="absolute left-1/2 -translate-x-1/2 top-[100%] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900"></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <LogoCanvas 
+          iconContent={getIconContent()}
+          iconSettings={iconSettings}
+          backgroundSettings={backgroundSettings}
+          getBackgroundStyle={getBackgroundStyle}
+          getShadowStyle={getShadowStyle}
+        />
 
         {/* Right Sidebar */}
         <div className="w-[280px] bg-white border-l flex-shrink-0">
           <div className="h-full overflow-y-auto">
             <div className="p-4">
+              <button
+                onClick={() => setIsAIModalOpen(true)}
+                className="w-full mb-6 flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors"
+              >
+                <Sparkles className="w-4 h-4" />
+                Ask AI
+              </button>
               <h3 className="text-sm font-medium text-gray-900 mb-4">Icons</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.entries(icons).map(([key, icon]) => (
-                  <button
-                    key={key}
-                    onClick={() => setSelectedIcon(key)}
-                    className={`w-full aspect-square border-2 rounded-md flex items-center justify-center p-2 ${
-                      selectedIcon === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-gray-700">
-                      {icon}
-                    </div>
-                  </button>
-                ))}
-                <button className="w-full aspect-square border-2 border-gray-200 rounded-md flex items-center justify-center hover:border-gray-300">
-                  <Plus className="w-6 h-6 text-gray-400" />
-                </button>
-              </div>
+              <IconGrid 
+                icons={icons}
+                selectedIcon={selectedIcon}
+                onIconClick={handleIconClick}
+              />
             </div>
           </div>
         </div>
       </div>
+
+      <AskAIModal 
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        onIconSelect={handleIconSelect}
+      />
     </div>
   );
 }
